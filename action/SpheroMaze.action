@@ -1,0 +1,8 @@
+#goal
+std_msgs/String goal #GO for start
+---
+#result
+std_msgs/Empty result #return nothing
+---
+#feedback
+std_msgs/Bool collision #collision true/false
