@@ -14,7 +14,6 @@ from imu_subscriber_node import imuReader
 
 import time
 
-
 class ControlSystemS(object):
     def __init__(self):
         self._publicador = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
@@ -25,13 +24,19 @@ class ControlSystemS(object):
     def doamove_in_direction(self, direction):
         
         #rospy.logerr("Is going to move now")
-        if direction == "forward":
+        if direction == "forwards":
             self._my_vel.linear.x = self.linear_speed
             self._my_vel.angular.z = 0.0
-        if direction == "back":
-            self._my_vel.linear.x -self.linear_speed
+        elif direction == "right":
+            self._my_vel.linear.x = 0.0
+            self._my_vel.angular.z = self.angular_speed
+        elif direction == "left":
+            self._my_vel.linear.x = 0.0
+            self._my_vel.angular.z = -self.angular_speed
+        elif direction == "backwards":
+            self._my_vel.linear.x = -self.linear_speed
             self._my_vel.angular.z = 0.0
-        if direction == "stop":
+        elif direction == "stop":
             self._my_vel.linear.x = 0.0
             self._my_vel.angular.z = 0.0
         else:
@@ -61,8 +66,12 @@ class mazeServer:
         #starting
         rospy.loginfo("Sphero bot is moving...")
         success = False
+        
+        
+        #Call the MAIN section to movements and logic
         if goal.goal.data == "GO":
             success = self.missionHandler()
+        
             
         #Everythig finished
         self._result = Empty()
@@ -71,27 +80,50 @@ class mazeServer:
         else:
             rospy.loginfo("MissionFailed")
         self._as.set_succeeded(self._result)
+        
+    def sensorsActing(self):
+        #initialize odometry object
+        odometrySphero = odomReader()
+     
+        #initialize Imu reader object
+        imuSphero = imuReader()
+        
+        return [odometrySphero, imuSphero]
+        
+    def crash_direction(self, detection_dict):
+        
+        for key, value in detection_dict.iteritems():
+            #print "{} -> {}".format(key, value)
+            if value:
+                return key
+        return False
     
     def missionHandler(self):
         #core of the movements logic
         #initialize movement object
-        self.spheroControl = ControlSystemS()
+        spheroControl = ControlSystemS()
         
-        #initialize odometry object
-        odometrySphero = odomReader()
-        odometrySphero1 = odometrySphero.get_odomdata()
-        #initialize Imu reader object
-        imuSphero = imuReader()
-        imuSphero1 = imuSphero.get_odomdata()
+        #for crash handler
+        self.detection_dict = {"front":False, "left":False, "right":False, "back":False}
+        odometrySphero, imuSphero = self.sensorsActing()
         
-        #print("odometry measurements -> x: {}, y: {}".format(odometrySphero[0], odometrySphero[1]))
-        #print("Imu measurements -> orientation= x: {}, y: {}, z: {}, w: {}".format(imuSphero[0][0], imuSphero[0][1], imuSphero[0][2], imuSphero[0][3]))
-        #print("Imu measurements -> angular velocity= x: {}, y: {}, z: {}".format(imuSphero[1][0], imuSphero[1][1], imuSphero[1][2]))
-        print("{}".format(odometrySphero1))
+        #CRASH DETECTOR------------
+        self.detection_dict = imuSphero.obstacle_detection()
+        print(self.detection_dict)
+        
+        #see what side did it crash
+        what_side = self.crash_direction(self.detection_dict)
+        if not what_side:
+            print "NO CRASH"
+        else:
+            print what_side
         
         goalAchieve = False
         i = 0
-        while i < 3 :
+        #for keep tracking same movement condition
+        message = ""
+        
+        while i < 10 :
             #check if not cancelled
             if self._as.is_preempt_requested():
                 rospy.loginfo("The goal has been cancelled/preempted")
@@ -107,16 +139,27 @@ class mazeServer:
             here goes the logical movements
             here goes the logical movements
             """
-            #read odometry/Imu measurements
-            #self.odometrySphero = odomReader()
-            #self.imuSphero = imuReader()
+        
+            #CRASH DETECTOR------------
+            self.detection_dict = imuSphero.obstacle_detection()
+            print(self.detection_dict)
+            
+            #see what side did it crash
+            what_side = self.crash_direction(self.detection_dict)
+            if not what_side:
+                print "NO CRASH"
+            else:
+                print what_side
+                #for collision change to collision positive case
+                self._feedback.collision.data = True
+            #---------------------
             
             #robot goes forward
-            self.spheroControl.doamove_in_direction("forward")
+            #self.spheroControl.doamove_in_direction("forward")
             
-            #
-            #for collision change to collision positive case
-            self._feedback.collision.data = True
+            #robot reacts to IMU
+            message = self.direction_to_move(self.detection_dict)
+            spheroControl.doamove_in_direction(message)
             
             self._as.publish_feedback(self._feedback)
             ####
@@ -127,10 +170,43 @@ class mazeServer:
             time.sleep(1)
             #aplying frequency
             self.r.sleep()
-            
+        
+        #CRASH DETECTOR------------
+        self.detection_dict = imuSphero.obstacle_detection()
+        print(self.detection_dict)
+        
+        #see what side did it crash
+        what_side = self.crash_direction(self.detection_dict)
+        if not what_side:
+            print "NO CRASH"
+        else:
+            print what_side
+        
         goalAchieve = True
-        self.spheroControl.doamove_in_direction("stop")
+        #STOP THE ROBOT
+        spheroControl.doamove_in_direction("stop")
         return goalAchieve
+        
+    def direction_to_move(self, detection_dict):
+        message= ""
+        #movement logic after a shock or crash
+        if not detection_dict["front"]:
+            message = "forwards"
+        
+        else:
+            if not detection_dict["back"]:
+                    message = "backwards"
+            else:
+                if not detection_dict["left"]:
+                    message = "left"
+                else:
+                    if not detection_dict["right"]:
+                        message = "right"
+                    else:
+                        message = "stop"
+
+        print "Message: ->>>>>>>>>>"+message
+        return message
         
 
 if __name__=='__main__':

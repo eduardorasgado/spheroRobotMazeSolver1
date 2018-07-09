@@ -12,21 +12,21 @@ class ControlSystemS(object):
     def doamove_in_direction(self, direction):
         
         #rospy.logerr("Is going to move now")
-        if direction == "forward":
+        if direction == "forwards":
             self._my_vel.linear.x = self.linear_speed
             self._my_vel.angular.z = 0.0
-        if direction == "back":
-            self._my_vel.linear.x -self.linear_speed
+        elif direction == "right":
+            self._my_vel.linear.x = 0.0
+            self._my_vel.angular.z = self.angular_speed
+        elif direction == "left":
+            self._my_vel.linear.x = 0.0
+            self._my_vel.angular.z = -self.angular_speed
+        elif direction == "backwards":
+            self._my_vel.linear.x = -self.linear_speed
             self._my_vel.angular.z = 0.0
-        if direction == "stop":
+        elif direction == "stop":
             self._my_vel.linear.x = 0.0
             self._my_vel.angular.z = 0.0
-        if direction == "left":
-            self._my_vel.linear.x = self.linear_speed
-            self._my_vel.angular.z =-self.angular_speed
-        if direction == "right":
-            self._my_vel.linear.x = self.linear_speed
-            self._my_vel.angular.z =self.angular_speed
         else:
             pass
             
@@ -52,5 +52,5 @@ if __name__=="__main__":
     rospy.on_shutdown(shutdownhook)
     
     while not ctrl_c:
-        spheroControl.doamove_in_direction("forward")
+        spheroControl.doamove_in_direction("backwards")
         rate.sleep()
