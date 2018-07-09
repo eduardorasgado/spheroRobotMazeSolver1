@@ -14,49 +14,30 @@ from imu_subscriber_node import imuReader
 
 import time
 
-class ControlSystem:
-    def __init__(self, pub=None):
-        self.pub = rospy.Publisher('/cmd_vel', Twist, queue_size=4)
-        self.rate = rospy.Rate(4)
+
+class ControlSystemS(object):
+    def __init__(self):
+        self._publicador = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        self._my_vel = Twist()
+        self.linear_speed = 0.05
+        self.angular_speed= 0.5
         
-    def doamove(self, timing,linearist,angularist):
-        my_vel = Twist()
-        my_vel.linear.x = linearist
-        my_vel.angular.z = angularist
-        rospy.logerr("Is going to move now")
-        self.publish_cmd_vel(my_vel)
+    def doamove_in_direction(self, direction):
         
-        time.sleep(timing)
-        
-        self.stop(my_vel)
-        
-    def publish_cmd_vel(self, my_vel):
-        connections = self.pub.get_num_connections()
-        conected = False
-        while not conected:
-            if connections > 0:
-                try:
-                    rospy.loginfo("Moving....")
-                    self.pub.publish(my_vel)
-                    rospy.loginfo("Action published")
-                    return True
-                    conected == True
-                except:
-                    rospy.logwarn("A fucking error!: 1")
-            else:
-                rospy.logwarn("A fucking error!: 2")
-                self.rate.sleep()
+        #rospy.logerr("Is going to move now")
+        if direction == "forward":
+            self._my_vel.linear.x = self.linear_speed
+            self._my_vel.angular.z = 0.0
+        if direction == "back":
+            self._my_vel.linear.x -self.linear_speed
+            self._my_vel.angular.z = 0.0
+        if direction == "stop":
+            self._my_vel.linear.x = 0.0
+            self._my_vel.angular.z = 0.0
+        else:
+            pass
             
-    def stop(self, my_vel):
-        my_vel.linear.x = 0
-        my_vel.linear.y = 0
-        my_vel.linear.z = 0
-        
-        my_vel.angular.z = 0
-        
-        self.pub.publish(my_vel)
-        rospy.loginfo("Sphero stopped")
-        self.rate.sleep()
+        self._publicador.publish(self._my_vel)
                 
 
 class mazeServer:
@@ -93,8 +74,24 @@ class mazeServer:
     
     def missionHandler(self):
         #core of the movements logic
+        #initialize movement object
+        self.spheroControl = ControlSystemS()
+        
+        #initialize odometry object
+        odometrySphero = odomReader()
+        odometrySphero1 = odometrySphero.get_odomdata()
+        #initialize Imu reader object
+        imuSphero = imuReader()
+        imuSphero1 = imuSphero.get_odomdata()
+        
+        #print("odometry measurements -> x: {}, y: {}".format(odometrySphero[0], odometrySphero[1]))
+        #print("Imu measurements -> orientation= x: {}, y: {}, z: {}, w: {}".format(imuSphero[0][0], imuSphero[0][1], imuSphero[0][2], imuSphero[0][3]))
+        #print("Imu measurements -> angular velocity= x: {}, y: {}, z: {}".format(imuSphero[1][0], imuSphero[1][1], imuSphero[1][2]))
+        print("{}".format(odometrySphero1))
+        
         goalAchieve = False
-        while not goalAchieve:
+        i = 0
+        while i < 3 :
             #check if not cancelled
             if self._as.is_preempt_requested():
                 rospy.loginfo("The goal has been cancelled/preempted")
@@ -110,19 +107,29 @@ class mazeServer:
             here goes the logical movements
             here goes the logical movements
             """
-            spheroControl = ControlSystem()
-            spheroControl.doamove(5, 0.1, 0)
+            #read odometry/Imu measurements
+            #self.odometrySphero = odomReader()
+            #self.imuSphero = imuReader()
+            
+            #robot goes forward
+            self.spheroControl.doamove_in_direction("forward")
+            
             #
             #for collision change to collision positive case
             self._feedback.collision.data = True
             
             self._as.publish_feedback(self._feedback)
             ####
-            goalAchieve = True
+            i +=1
             ####
-            #applying frequency
+            
+            #applying timing
+            time.sleep(1)
+            #aplying frequency
             self.r.sleep()
-        
+            
+        goalAchieve = True
+        self.spheroControl.doamove_in_direction("stop")
         return goalAchieve
         
 
